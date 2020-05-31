@@ -9,18 +9,18 @@ import (
 
 // WAD describes the structure enclosing information in a typical WAD's format.
 type WAD struct {
-	// BinaryContents is a structure representing
-	Header                    BinaryWAD
+	Header                    WADHeader
 	CertificateChain          []byte
 	CertificateRevocationList []byte
 	Ticket                    Ticket
+	TMD                       TMD
 	RawData                   []byte
 	Meta                      []byte
 }
 
-type BinaryWAD struct {
+type WADHeader struct {
 	HeaderSize      uint32
-	WADType         uint32
+	WADType         WADType
 	CertificateSize uint32
 	CRLSize         uint32
 	TicketSize      uint32
@@ -29,10 +29,12 @@ type BinaryWAD struct {
 	MetaSize        uint32
 }
 
+type WADType uint32
+
 // WADType contains a list of WAD types to compare against.
 const (
 	// Used for IOS, channels, and roughly all other items.
-	WADTypeCommon = 0x49730000
+	WADTypeCommon WADType = 0x49730000
 	// Used for WADs containing boot-related items.
 	WADTypeBoot = 0x69620000
 	// Documented under https://wiibrew.org/wiki/WAD_files#Header by bushing.
@@ -41,14 +43,18 @@ const (
 )
 
 func getPadding(size uint32) uint32 {
-	// You shouldn't pad nothing to begin with.
+	// Empty things aren't padded.
 	if size == 0 {
 		return 0
 	}
 
 	// We can calculate padding from the remainder.
 	leftover := size % 64
-	return 64 - leftover
+	if leftover == 0 {
+		return 0
+	} else {
+		return 64 - leftover
+	}
 }
 
 // LoadWADFromFile takes a path, loads it, and parses the given binary WAD.
@@ -63,59 +69,62 @@ func LoadWADFromFile(filePath string) (*WAD, error) {
 
 // LoadWAD takes contents and parses the given binary WAD.
 func LoadWAD(contents []byte) (*WAD, error) {
-	var wad BinaryWAD
-
+	// Read the given header. Per Nintendo's configuration, this should only be 32 bytes.
+	var header WADHeader
 	loadingBuf := bytes.NewBuffer(contents[:32])
-	err := binary.Read(loadingBuf, binary.BigEndian, &wad)
+	err := binary.Read(loadingBuf, binary.BigEndian, &header)
 	if err != nil {
 		return nil, err
 	}
 
 	// Simple sanity check.
-	if int(wad.HeaderSize) != 32 {
+	if int(header.HeaderSize) != 32 {
 		return nil, errors.New("header should be 32 bytes in default Nintendo configuration")
 	}
 
-	if int(wad.CertificateSize+wad.CRLSize+wad.TicketSize+wad.TMDSize+wad.DataSize+wad.MetaSize) > len(contents) {
+	if int(header.CertificateSize+header.CRLSize+header.TicketSize+header.TMDSize+header.DataSize+header.MetaSize) > len(contents) {
 		return nil, errors.New("contents as described in header were in sum larger than contents passed")
 	}
 
 	// To align with 0x40, we would now need to read 0x20 more bytes to get to the certificates/CRL data.
-	// Thankfully, we have the entire array and can just avoid that.
-	currentlyRead := wad.HeaderSize + getPadding(wad.HeaderSize)
+	// Thankfully, we have the entire contents in an array and can just avoid that.
+	currentlyRead := header.HeaderSize + getPadding(header.HeaderSize)
 
-	certificate := contents[currentlyRead : currentlyRead+wad.CertificateSize]
-	currentlyRead += wad.CertificateSize + getPadding(wad.CertificateSize)
+	certificate := contents[currentlyRead : currentlyRead+header.CertificateSize]
+	currentlyRead += header.CertificateSize + getPadding(header.CertificateSize)
 
-	crl := contents[currentlyRead : currentlyRead+wad.CRLSize]
-	currentlyRead += wad.CRLSize + getPadding(wad.CRLSize)
+	crl := contents[currentlyRead : currentlyRead+header.CRLSize]
+	currentlyRead += header.CRLSize + getPadding(header.CRLSize)
 
+	// Load a ticket from our contents into the struct.
 	var ticket Ticket
-	loadingBuf = bytes.NewBuffer(contents[currentlyRead : currentlyRead+wad.TicketSize])
+	loadingBuf = bytes.NewBuffer(contents[currentlyRead : currentlyRead+header.TicketSize])
 	err = binary.Read(loadingBuf, binary.BigEndian, &ticket)
 	if err != nil {
 		return nil, err
 	}
+	currentlyRead += header.TicketSize + getPadding(header.TicketSize)
 
-	currentlyRead += wad.TicketSize + getPadding(wad.TicketSize)
-
+	// Load the TMD following from our contents into the struct.
 	var tmd TMD
-	loadingBuf = bytes.NewBuffer(contents[currentlyRead : currentlyRead+wad.TMDSize])
-	err = binary.Read(loadingBuf, binary.BigEndian, &wad)
+	loadingBuf = bytes.NewBuffer(contents[currentlyRead : currentlyRead+header.TMDSize])
+	err = binary.Read(loadingBuf, binary.BigEndian, &tmd)
 	if err != nil {
 		return nil, err
 	}
 
-	data := contents[currentlyRead : currentlyRead+wad.DataSize]
-	currentlyRead += wad.DataSize + getPadding(wad.DataSize)
+	data := contents[currentlyRead : currentlyRead+header.DataSize]
+	currentlyRead += header.DataSize + getPadding(header.DataSize)
 
-	meta := contents[currentlyRead : currentlyRead+wad.MetaSize]
+	// We're at the very end and can safely read to the very end of meta, ignoring subsequent data.
+	meta := contents[currentlyRead : currentlyRead+header.MetaSize]
 
 	return &WAD{
-		Header:                    wad,
+		Header:                    header,
 		CertificateChain:          certificate,
 		CertificateRevocationList: crl,
 		Ticket:                    ticket,
+		TMD:                       tmd,
 		RawData:                   data,
 		Meta:                      meta,
 	}, nil
