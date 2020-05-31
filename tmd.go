@@ -1,6 +1,6 @@
 package wadlib
 
-type TMD struct {
+type BinaryTMD struct {
 	SignatureType SignatureType
 	Signature     [256]byte
 	// Signature padding to nearest 64 bytes
@@ -25,8 +25,12 @@ type TMD struct {
 	NumberOfContents  uint16
 	BootIndex         uint16
 	// Further alignment
-	_        uint16
-	//Contents []ContentRecord
+	_ uint16
+}
+
+type TMD struct {
+	BinaryTMD
+	Contents []ContentRecord
 }
 
 type ContentRecord struct {

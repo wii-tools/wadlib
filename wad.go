@@ -29,19 +29,6 @@ type WADHeader struct {
 	MetaSize        uint32
 }
 
-type WADType uint32
-
-// WADType contains a list of WAD types to compare against.
-const (
-	// Used for IOS, channels, and roughly all other items.
-	WADTypeCommon WADType = 0x49730000
-	// Used for WADs containing boot-related items.
-	WADTypeBoot = 0x69620000
-	// Documented under https://wiibrew.org/wiki/WAD_files#Header by bushing.
-	// I have not encountered this format in the wild, nor any SDK.
-	WADTypeUnknown = 0x426b000
-)
-
 func getPadding(size uint32) uint32 {
 	// Empty things aren't padded.
 	if size == 0 {
@@ -55,6 +42,10 @@ func getPadding(size uint32) uint32 {
 	} else {
 		return 64 - leftover
 	}
+}
+
+func sizeWithPadding(size uint32) uint32 {
+	return size + getPadding(size)
 }
 
 // LoadWADFromFile takes a path, loads it, and parses the given binary WAD.
@@ -88,13 +79,13 @@ func LoadWAD(contents []byte) (*WAD, error) {
 
 	// To align with 0x40, we would now need to read 0x20 more bytes to get to the certificates/CRL data.
 	// Thankfully, we have the entire contents in an array and can just avoid that.
-	currentlyRead := header.HeaderSize + getPadding(header.HeaderSize)
+	currentlyRead := sizeWithPadding(header.HeaderSize)
 
 	certificate := contents[currentlyRead : currentlyRead+header.CertificateSize]
-	currentlyRead += header.CertificateSize + getPadding(header.CertificateSize)
+	currentlyRead += sizeWithPadding(header.CertificateSize)
 
 	crl := contents[currentlyRead : currentlyRead+header.CRLSize]
-	currentlyRead += header.CRLSize + getPadding(header.CRLSize)
+	currentlyRead += sizeWithPadding(header.CRLSize)
 
 	// Load a ticket from our contents into the struct.
 	var ticket Ticket
@@ -103,18 +94,36 @@ func LoadWAD(contents []byte) (*WAD, error) {
 	if err != nil {
 		return nil, err
 	}
-	currentlyRead += header.TicketSize + getPadding(header.TicketSize)
+	currentlyRead += sizeWithPadding(header.TicketSize)
 
 	// Load the TMD following from our contents into the struct.
-	var tmd TMD
-	loadingBuf = bytes.NewBuffer(contents[currentlyRead : currentlyRead+header.TMDSize])
+	// We have to read in the statically positioned values first.
+	var tmd BinaryTMD
+	tmdSize := uint32(binary.Size(tmd))
+	loadingBuf = bytes.NewBuffer(contents[currentlyRead : currentlyRead+tmdSize])
 	err = binary.Read(loadingBuf, binary.BigEndian, &tmd)
 	if err != nil {
 		return nil, err
 	}
+	// We've only partially read the full TMD, so only partially increment.
+	currentlyRead += tmdSize
+
+	// Now, we create contents with the number of values as previously loaded.
+	// The primary length of the TMD struct is 484 bytes.
+	contentIndex := make([]ContentRecord, tmd.NumberOfContents)
+	// We can now read to the end of the TMD.
+	remainingSize := header.TMDSize - tmdSize
+	loadingBuf = bytes.NewBuffer(contents[currentlyRead : currentlyRead+remainingSize])
+	err = binary.Read(loadingBuf, binary.BigEndian, &contentIndex)
+	if err != nil {
+		panic(err)
+	}
+
+	// We've now read the TMD in full.
+	currentlyRead += remainingSize + getPadding(header.TicketSize)
 
 	data := contents[currentlyRead : currentlyRead+header.DataSize]
-	currentlyRead += header.DataSize + getPadding(header.DataSize)
+	currentlyRead += sizeWithPadding(header.DataSize)
 
 	// We're at the very end and can safely read to the very end of meta, ignoring subsequent data.
 	meta := contents[currentlyRead : currentlyRead+header.MetaSize]
@@ -124,8 +133,11 @@ func LoadWAD(contents []byte) (*WAD, error) {
 		CertificateChain:          certificate,
 		CertificateRevocationList: crl,
 		Ticket:                    ticket,
-		TMD:                       tmd,
-		RawData:                   data,
-		Meta:                      meta,
+		TMD: TMD{
+			tmd,
+			contentIndex,
+		},
+		RawData: data,
+		Meta:    meta,
 	}, nil
 }

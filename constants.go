@@ -11,6 +11,19 @@ const (
 	SignatureRSA2048 SignatureType = 0x00010001
 )
 
+type WADType uint32
+
+// WADType contains a list of WAD types to compare against.
+const (
+	// Used for IOS, channels, and roughly all other items.
+	WADTypeCommon WADType = 0x49730000
+	// Used for WADs containing boot-related items.
+	WADTypeBoot = 0x69620000
+	// Documented under https://wiibrew.org/wiki/WAD_files#Header by bushing.
+	// I have not encountered this format in the wild, nor any SDK.
+	WADTypeUnknown = 0x426b000
+)
+
 // ESLicenseType describes the current title's license type.
 type ESLicenseType uint8
 
