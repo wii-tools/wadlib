@@ -24,7 +24,7 @@ type Ticket struct {
 	AccessTitleMask uint32
 	LicenseType     uint8
 	KeyType         uint8
-	Unknown         [62]byte
+	Unknown         [114]byte
 	TimeLimits      [8]TimeLimitEntry
 }
 
