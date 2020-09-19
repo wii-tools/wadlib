@@ -13,11 +13,12 @@ type WAD struct {
 	CertificateChain          []byte
 	CertificateRevocationList []byte
 	Ticket                    Ticket
-	TMD                       TMD
+	TMD                       *TMD
 	RawData                   []byte
 	Meta                      []byte
 }
 
+// WADHeader describes a Nintendo WAD's typical header with sizes.
 type WADHeader struct {
 	HeaderSize      uint32
 	WADType         WADType
@@ -29,6 +30,8 @@ type WADHeader struct {
 	MetaSize        uint32
 }
 
+// getPadding returns the given size, padded to the nearest 0x40/64-byte boundary.
+// This is useful as all WAD contents are padded to such.
 func getPadding(size uint32) uint32 {
 	// Empty things aren't padded.
 	if size == 0 {
@@ -44,8 +47,26 @@ func getPadding(size uint32) uint32 {
 	}
 }
 
-func sizeWithPadding(size uint32) uint32 {
-	return size + getPadding(size)
+// You use readable when you want to stagger contents and not use scary splice related methods.
+type readable struct {
+	data       []byte
+	amountRead uint32
+}
+
+// getRange returns a range of data for a size. By default, it is padded to the closest 64 bytes.
+func (r *readable) getRange(size uint32) []byte {
+	current := r.amountRead
+	// We'll want to return the range with actual data by size.
+	selectedRange := r.data[current : current+size]
+	// Then, we'll want to increment amountRead by the padded size.
+	r.amountRead += size + getPadding(size)
+
+	return selectedRange
+}
+
+// getBuffer returns a buffer of data for a size. By default, it is padded to the closest 64 bytes.
+func (r *readable) getBuffer(size uint32) *bytes.Buffer {
+	return bytes.NewBuffer(r.getRange(size))
 }
 
 // LoadWADFromFile takes a path, loads it, and parses the given binary WAD.
@@ -61,83 +82,65 @@ func LoadWADFromFile(filePath string) (*WAD, error) {
 // LoadWAD takes contents and parses the given binary WAD.
 func LoadWAD(contents []byte) (*WAD, error) {
 	// Read the given header. Per Nintendo's configuration, this should only be 32 bytes.
+	// The first u32 should be from the header, describing its own size.
+	// It's important to check the exact order of these bytes to determine endianness.
+	if !bytes.Equal(contents[0:4], []byte{0x00, 0x00, 0x00, 0x20}) {
+		return nil, errors.New("header should be 32 bytes in default Nintendo configuration")
+	}
+
+	r := readable{
+		data: contents,
+	}
+
+	// We'll read the header first as this is in order of the file.
+	// We determined above that the header is 0x20 in length.
 	var header WADHeader
-	loadingBuf := bytes.NewBuffer(contents[:32])
+	loadingBuf := r.getBuffer(0x20)
 	err := binary.Read(loadingBuf, binary.BigEndian, &header)
 	if err != nil {
 		return nil, err
 	}
 
 	// Simple sanity check.
-	if int(header.HeaderSize) != 32 {
-		return nil, errors.New("header should be 32 bytes in default Nintendo configuration")
-	}
-
 	if int(header.CertificateSize+header.CRLSize+header.TicketSize+header.TMDSize+header.DataSize+header.MetaSize) > len(contents) {
 		return nil, errors.New("contents as described in header were in sum larger than contents passed")
 	}
 
-	// To align with 0x40, we would now need to read 0x20 more bytes to get to the certificates/CRL data.
-	// Thankfully, we have the entire contents in an array and can just avoid that.
-	currentlyRead := sizeWithPadding(header.HeaderSize)
+	// Next, the certificate section and CRL following.
+	// As observed on the Wii, the CRL section is always 0,
+	//along with any references to its version.
+	certificate := r.getRange(header.CertificateSize)
+	crl := r.getRange(header.CRLSize)
 
-	certificate := contents[currentlyRead : currentlyRead+header.CertificateSize]
-	currentlyRead += sizeWithPadding(header.CertificateSize)
-
-	crl := contents[currentlyRead : currentlyRead+header.CRLSize]
-	currentlyRead += sizeWithPadding(header.CRLSize)
-
+	// We'll next
 	// Load a ticket from our contents into the struct.
 	var ticket Ticket
-	loadingBuf = bytes.NewBuffer(contents[currentlyRead : currentlyRead+header.TicketSize])
+	loadingBuf = r.getBuffer(header.TicketSize)
 	err = binary.Read(loadingBuf, binary.BigEndian, &ticket)
 	if err != nil {
 		return nil, err
 	}
-	currentlyRead += sizeWithPadding(header.TicketSize)
 
 	// Load the TMD following from our contents into the struct.
-	// We have to read in the statically positioned values first.
-	var tmd BinaryTMD
-	tmdSize := uint32(binary.Size(tmd))
-	loadingBuf = bytes.NewBuffer(contents[currentlyRead : currentlyRead+tmdSize])
-	err = binary.Read(loadingBuf, binary.BigEndian, &tmd)
+	// It needs a separate function to handle dynamic contents listed.
+	tmd, err := readTMD(r.getBuffer(header.TMDSize))
 	if err != nil {
 		return nil, err
 	}
-	// We've only partially read the full TMD, so only partially increment.
-	currentlyRead += tmdSize
 
-	// Now, we create contents with the number of values as previously loaded.
-	// The primary length of the TMD struct is 484 bytes.
-	contentIndex := make([]ContentRecord, tmd.NumberOfContents)
-	// We can now read to the end of the TMD.
-	remainingSize := header.TMDSize - tmdSize
-	loadingBuf = bytes.NewBuffer(contents[currentlyRead : currentlyRead+remainingSize])
-	err = binary.Read(loadingBuf, binary.BigEndian, &contentIndex)
-	if err != nil {
-		panic(err)
-	}
-
-	// We've now read the TMD in full.
-	currentlyRead += remainingSize + getPadding(header.TicketSize)
-
-	data := contents[currentlyRead : currentlyRead+header.DataSize]
-	currentlyRead += sizeWithPadding(header.DataSize)
+	// For each content, we want to separate the raw data.
+	data := r.getRange(header.DataSize)
 
 	// We're at the very end and can safely read to the very end of meta, ignoring subsequent data.
-	meta := contents[currentlyRead : currentlyRead+header.MetaSize]
+	meta := r.getRange(header.MetaSize)
 
 	return &WAD{
 		Header:                    header,
 		CertificateChain:          certificate,
 		CertificateRevocationList: crl,
 		Ticket:                    ticket,
-		TMD: TMD{
-			tmd,
-			contentIndex,
-		},
-		RawData: data,
-		Meta:    meta,
+		TMD:                       tmd,
+		RawData:                   data,
+		Meta:                      meta,
 	}, nil
 }

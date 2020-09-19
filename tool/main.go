@@ -7,26 +7,11 @@ import (
 )
 
 func main() {
-	wad, err := wadlib.LoadWADFromFile("./BOOT2-64-v2.wad")
+	wad, err := wadlib.LoadWADFromFile("./RVL-Weather-v3.wad.out.wad")
 	if err != nil {
 		panic(err)
 	}
-
-	//log.Print(wad)
-	//log.Printf("WADType == WADTypeCommon? This is %t", wad.Header.WADType == wadlib.WADTypeBoot)
-
-	//wad, err := wadlib.LoadWADFromFile("./IOS80-64-6944.wad")
-	//if err != nil {
-	//	panic(err)
-	//}
-
-	jsonify(wad.Header)
-	jsonify(wad.Ticket)
-	jsonify(wad.TMD)
-
-
-	//log.Print(wad)
-	//log.Printf("WADType == WADTypeBoot? This is %t", wad.Header.WADType == wadlib.WADTypeCommon)
+	jsonify(wad.Ticket.Issuer)
 }
 
 func jsonify(wadStruct interface{}) {
