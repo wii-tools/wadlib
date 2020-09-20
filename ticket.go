@@ -1,5 +1,11 @@
 package wadlib
 
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/binary"
+)
+
 // Ticket defines the binary structure of a given ticket file.
 type Ticket struct {
 	SignatureType SignatureType
@@ -23,7 +29,7 @@ type Ticket struct {
 	AccessTitleID   uint32
 	AccessTitleMask uint32
 	LicenseType     uint8
-	KeyType         uint8
+	KeyType         KeyType
 	Unknown         [114]byte
 	TimeLimits      [8]TimeLimitEntry
 }
@@ -34,4 +40,71 @@ type TimeLimitEntry struct {
 	Code uint32
 	// Each limit is in seconds.
 	Limit uint32
+}
+
+func (t *Ticket) selectCommonKey() [16]byte {
+	switch t.KeyType {
+	case KeyTypeCommon:
+		return CommonKey
+	case KeyTypeKoren:
+		return KoreanKey
+	case KeyTypevWii:
+		return WiiUvWiiKey
+	default:
+		panic("unknown key type specified in ticket")
+	}
+}
+
+func (t *Ticket) decryptKey() error {
+	// Use the appropriate common key per this ticket.
+	key := t.selectCommonKey()
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return err
+	}
+
+	// The specified title ID is used as the IV.
+	var titleId [16]byte
+	binary.BigEndian.PutUint64(titleId[:], t.TitleID)
+
+	// The resulting decrypted key is 16 bytes in length as well.
+	blockMode := cipher.NewCBCDecrypter(block, titleId[:])
+	decryptedKey := make([]byte, 16)
+
+	// t.TitleKey is the current, encrypted contents from the original ticket.
+	blockMode.CryptBlocks(decryptedKey, t.TitleKey[:])
+
+	// Set this decrypted key to what we have stored.
+	var titleKey [16]byte
+	copy(titleKey[:], decryptedKey)
+	t.TitleKey = titleKey
+
+	return nil
+}
+
+func (t *Ticket) encryptKey() error {
+	// Use the appropriate common key per this ticket.
+	key := t.selectCommonKey()
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return err
+	}
+
+	// The specified title ID is used as the IV.
+	var titleId [16]byte
+	binary.BigEndian.PutUint64(titleId[:], t.TitleID)
+
+	// The resulting encrypted key is 16 bytes in length as well.
+	blockMode := cipher.NewCBCEncrypter(block, titleId[:])
+	encryptedKey := make([]byte, 16)
+
+	// t.TitleKey is the current, encrypted contents from the original ticket.
+	blockMode.CryptBlocks(encryptedKey, t.TitleKey[:])
+
+	// Set this encrypted key to what we have stored.
+	var titleKey [16]byte
+	copy(titleKey[:], encryptedKey)
+	t.TitleKey = titleKey
+
+	return nil
 }

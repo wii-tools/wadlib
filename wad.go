@@ -120,6 +120,10 @@ func LoadWAD(contents []byte) (*WAD, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = ticket.decryptKey()
+	if err != nil {
+		return nil, err
+	}
 
 	// Load the TMD following from our contents into the struct.
 	// It needs a separate function to handle dynamic contents listed.
