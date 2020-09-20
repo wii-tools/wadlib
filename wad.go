@@ -14,7 +14,7 @@ type WAD struct {
 	CertificateRevocationList []byte
 	Ticket                    Ticket
 	TMD                       *TMD
-	RawData                   []byte
+	Data                      []WADFile
 	Meta                      []byte
 }
 
@@ -133,7 +133,10 @@ func LoadWAD(contents []byte) (*WAD, error) {
 	}
 
 	// For each content, we want to separate the raw data.
-	data := r.getRange(header.DataSize)
+	data, err := readData(r.getRange(header.DataSize), tmd.Contents, ticket.TitleKey)
+	if err != nil {
+		return nil, err
+	}
 
 	// We're at the very end and can safely read to the very end of meta, ignoring subsequent data.
 	meta := r.getRange(header.MetaSize)
@@ -144,7 +147,7 @@ func LoadWAD(contents []byte) (*WAD, error) {
 		CertificateRevocationList: crl,
 		Ticket:                    ticket,
 		TMD:                       tmd,
-		RawData:                   data,
+		Data:                      data,
 		Meta:                      meta,
 	}, nil
 }
