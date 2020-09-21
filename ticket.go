@@ -55,7 +55,7 @@ func (t *Ticket) selectCommonKey() [16]byte {
 	}
 }
 
-func (t *Ticket) decryptKey() error {
+func (t *Ticket) DecryptKey() error {
 	// Use the appropriate common key per this ticket.
 	key := t.selectCommonKey()
 	block, err := aes.NewCipher(key[:])
@@ -82,7 +82,7 @@ func (t *Ticket) decryptKey() error {
 	return nil
 }
 
-func (t *Ticket) encryptKey() error {
+func (t *Ticket) EncryptKey() error {
 	// Use the appropriate common key per this ticket.
 	key := t.selectCommonKey()
 	block, err := aes.NewCipher(key[:])

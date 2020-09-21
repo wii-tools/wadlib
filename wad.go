@@ -119,7 +119,7 @@ func LoadWAD(contents []byte) (*WAD, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = ticket.decryptKey()
+	err = ticket.DecryptKey()
 	if err != nil {
 		return nil, err
 	}
