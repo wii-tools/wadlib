@@ -31,7 +31,16 @@ func readData(data []byte, contents []ContentRecord, titleKey [16]byte) ([]WADFi
 	for _, content := range contents {
 		// It's okay to cast this from a uint64 as the WAD file format
 		// cannot exceed the maximum uint32 value within the data section.
-		encryptedData := r.getRange(uint32(content.Size))
+		// We read aligned to 16 bytes as the encrypted data is stored with padding.
+		// Not all contents meet the expected 16-byte boundary.
+		paddedSize := uint32(content.Size)
+		leftover := paddedSize % 16
+		if leftover != 0 {
+			paddedSize += 16 - leftover
+		}
+
+		// Read the padded amount as aligned to 64 bytes.
+		encryptedData := r.getRange(paddedSize)
 
 		// The title's decrypted key will be what we'll decrypt with.
 		block, err := aes.NewCipher(titleKey[:])
@@ -51,10 +60,13 @@ func readData(data []byte, contents []ContentRecord, titleKey [16]byte) ([]WADFi
 		blockMode := cipher.NewCBCDecrypter(block, iv)
 
 		// The resulting decrypted contents is the same size as the input, including padding.
-		decryptedData := make([]byte, content.Size)
+		decryptedData := make([]byte, paddedSize)
 
 		// ...and we're off!
 		blockMode.CryptBlocks(decryptedData, encryptedData)
+
+		// Trim off the excess padding once decrypted.
+		decryptedData = decryptedData[:content.Size]
 
 		// Ensure that the decrypted data matches the SHA-1 hash given in the contents list.
 		sha := sha1.Sum(decryptedData)

@@ -31,7 +31,7 @@ type WADHeader struct {
 }
 
 // getPadding returns the given size, padded to the nearest 0x40/64-byte boundary.
-// This is useful as all WAD contents are padded to such.
+// This is useful as many types of contents are padded to such.
 func getPadding(size uint32) uint32 {
 	// Empty things aren't padded.
 	if size == 0 {
@@ -112,8 +112,7 @@ func LoadWAD(contents []byte) (*WAD, error) {
 	certificate := r.getRange(header.CertificateSize)
 	crl := r.getRange(header.CRLSize)
 
-	// We'll next
-	// Load a ticket from our contents into the struct.
+	// We'll next load a ticket from our contents into the struct.
 	var ticket Ticket
 	loadingBuf = r.getBuffer(header.TicketSize)
 	err = binary.Read(loadingBuf, binary.BigEndian, &ticket)
