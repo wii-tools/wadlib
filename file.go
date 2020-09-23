@@ -15,7 +15,7 @@ type WADFile struct {
 	RawData []byte
 }
 
-func readData(data []byte, contents []ContentRecord, titleKey [16]byte) ([]WADFile, error) {
+func LoadData(data []byte, contents []ContentRecord, titleKey [16]byte) ([]WADFile, error) {
 	// Each content within the data section is aligned to a 0x40/64-byte boundary.
 	r := readable{
 		data: data,

@@ -2,7 +2,6 @@ package wadlib
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"io/ioutil"
 )
@@ -13,21 +12,9 @@ type WAD struct {
 	CertificateChain          []byte
 	CertificateRevocationList []byte
 	Ticket                    Ticket
-	TMD                       *TMD
+	TMD                       TMD
 	Data                      []WADFile
 	Meta                      []byte
-}
-
-// WADHeader describes a Nintendo WAD's typical header with sizes.
-type WADHeader struct {
-	HeaderSize      uint32
-	WADType         WADType
-	CertificateSize uint32
-	CRLSize         uint32
-	TicketSize      uint32
-	TMDSize         uint32
-	DataSize        uint32
-	MetaSize        uint32
 }
 
 // getPadding returns the given size, padded to the nearest 0x40/64-byte boundary.
@@ -94,9 +81,7 @@ func LoadWAD(contents []byte) (*WAD, error) {
 
 	// We'll read the header first as this is in order of the file.
 	// We determined above that the header is 0x20 in length.
-	var header WADHeader
-	loadingBuf := r.getBuffer(0x20)
-	err := binary.Read(loadingBuf, binary.BigEndian, &header)
+	header, err := LoadHeader(r.getRange(0x20))
 	if err != nil {
 		return nil, err
 	}
@@ -108,31 +93,25 @@ func LoadWAD(contents []byte) (*WAD, error) {
 
 	// Next, the certificate section and CRL following.
 	// As observed on the Wii, the CRL section is always 0,
-	//along with any references to its version.
+	// along with any references to its version.
 	certificate := r.getRange(header.CertificateSize)
 	crl := r.getRange(header.CRLSize)
 
 	// We'll next load a ticket from our contents into the struct.
-	var ticket Ticket
-	loadingBuf = r.getBuffer(header.TicketSize)
-	err = binary.Read(loadingBuf, binary.BigEndian, &ticket)
-	if err != nil {
-		return nil, err
-	}
-	err = ticket.DecryptKey()
+	ticket, err := LoadTicket(r.getRange(header.TicketSize))
 	if err != nil {
 		return nil, err
 	}
 
 	// Load the TMD following from our contents into the struct.
 	// It needs a separate function to handle dynamic contents listed.
-	tmd, err := readTMD(r.getBuffer(header.TMDSize))
+	tmd, err := LoadTMD(r.getRange(header.TMDSize))
 	if err != nil {
 		return nil, err
 	}
 
 	// For each content, we want to separate the raw data.
-	data, err := readData(r.getRange(header.DataSize), tmd.Contents, ticket.TitleKey)
+	data, err := LoadData(r.getRange(header.DataSize), tmd.Contents, ticket.TitleKey)
 	if err != nil {
 		return nil, err
 	}

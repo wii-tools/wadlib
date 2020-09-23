@@ -3,6 +3,7 @@ package wadlib
 import (
 	"bytes"
 	"encoding/binary"
+	"io/ioutil"
 )
 
 type BinaryTMD struct {
@@ -47,14 +48,16 @@ type ContentRecord struct {
 	Hash  [20]byte
 }
 
-func readTMD(contents *bytes.Buffer) (*TMD, error) {
+func LoadTMD(contents []byte) (TMD, error) {
+	loadingBuf := bytes.NewBuffer(contents)
+
 	// We have to read in the statically positioned values first.
 	// The buffer will read in all it can,
 	// which should be all values up to the variable contents at its end.
 	var tmd BinaryTMD
-	err := binary.Read(contents, binary.BigEndian, &tmd)
+	err := binary.Read(loadingBuf, binary.BigEndian, &tmd)
 	if err != nil {
-		return nil, err
+		return TMD{}, err
 	}
 
 	// Now, we create contents with the number of values as previously loaded.
@@ -62,13 +65,38 @@ func readTMD(contents *bytes.Buffer) (*TMD, error) {
 	contentIndex := make([]ContentRecord, tmd.NumberOfContents)
 
 	// We can now read to the end of the TMD to our contents.
-	err = binary.Read(contents, binary.BigEndian, &contentIndex)
+	err = binary.Read(loadingBuf, binary.BigEndian, &contentIndex)
 	if err != nil {
-		return nil, err
+		return TMD{}, err
 	}
 
-	return &TMD{
+	return TMD{
 		tmd,
 		contentIndex,
 	}, nil
+}
+
+func (t *TMD) GetTMD() []byte {
+	// First, handle the fixed-length BinaryTMD.
+	var tmp bytes.Buffer
+	err := binary.Write(&tmp, binary.BigEndian, t.BinaryTMD)
+	if err != nil {
+		panic(err)
+	}
+
+	// Then, write all individual content records.
+	for _, content := range t.Contents {
+		err := binary.Write(&tmp, binary.BigEndian, content)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	// Read the buffer's contents.
+	contents, err := ioutil.ReadAll(&tmp)
+	if err != nil {
+		panic(err)
+	}
+
+	return contents
 }

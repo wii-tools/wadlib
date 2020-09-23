@@ -1,9 +1,11 @@
 package wadlib
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
+	"io/ioutil"
 )
 
 // Ticket defines the binary structure of a given ticket file.
@@ -107,4 +109,35 @@ func (t *Ticket) EncryptKey() error {
 	t.TitleKey = titleKey
 
 	return nil
+}
+
+func LoadTicket(source []byte) (Ticket, error) {
+	var ticket Ticket
+	loadingBuf := bytes.NewBuffer(source)
+	err := binary.Read(loadingBuf, binary.BigEndian, &ticket)
+	if err != nil {
+		return Ticket{}, err
+	}
+
+	err = ticket.DecryptKey()
+	if err != nil {
+		return Ticket{}, err
+	}
+
+	return ticket, nil
+}
+
+func (t *Ticket) GetTicket() []byte {
+	var tmp bytes.Buffer
+	err := binary.Write(&tmp, binary.BigEndian, t)
+	if err != nil {
+		panic(err)
+	}
+
+	contents, err := ioutil.ReadAll(&tmp)
+	if err != nil {
+		panic(err)
+	}
+
+	return contents
 }
