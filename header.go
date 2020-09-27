@@ -18,17 +18,18 @@ type WADHeader struct {
 	MetaSize        uint32
 }
 
-func LoadHeader(source []byte) (WADHeader, error) {
+func (w *WAD) LoadHeader(source []byte) error {
 	var header WADHeader
 	loadingBuf := bytes.NewBuffer(source)
 	err := binary.Read(loadingBuf, binary.BigEndian, &header)
 	if err != nil {
-		return WADHeader{}, err
+		return err
 	}
-	return header, nil
+	w.Header = header
+	return nil
 }
 
-func (w *WADHeader) GetHeader() []byte {
+func (w *WAD) GetHeader() ([]byte, error) {
 	var tmp bytes.Buffer
 	err := binary.Write(&tmp, binary.BigEndian, w)
 	if err != nil {
@@ -37,8 +38,8 @@ func (w *WADHeader) GetHeader() []byte {
 
 	contents, err := ioutil.ReadAll(&tmp)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return contents
+	return contents, nil
 }

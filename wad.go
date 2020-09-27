@@ -51,11 +51,6 @@ func (r *readable) getRange(size uint32) []byte {
 	return selectedRange
 }
 
-// getBuffer returns a buffer of data for a size. By default, it is padded to the closest 64 bytes.
-func (r *readable) getBuffer(size uint32) *bytes.Buffer {
-	return bytes.NewBuffer(r.getRange(size))
-}
-
 // LoadWADFromFile takes a path, loads it, and parses the given binary WAD.
 func LoadWADFromFile(filePath string) (*WAD, error) {
 	contents, err := ioutil.ReadFile(filePath)
@@ -78,15 +73,17 @@ func LoadWAD(contents []byte) (*WAD, error) {
 	r := readable{
 		data: contents,
 	}
+	wad := WAD{}
 
 	// We'll read the header first as this is in order of the file.
 	// We determined above that the header is 0x20 in length.
-	header, err := LoadHeader(r.getRange(0x20))
+	err := wad.LoadHeader(r.getRange(0x20))
 	if err != nil {
 		return nil, err
 	}
 
 	// Simple sanity check.
+	header := wad.Header
 	if int(header.CertificateSize+header.CRLSize+header.TicketSize+header.TMDSize+header.DataSize+header.MetaSize) > len(contents) {
 		return nil, errors.New("contents as described in header were in sum larger than contents passed")
 	}
@@ -94,38 +91,30 @@ func LoadWAD(contents []byte) (*WAD, error) {
 	// Next, the certificate section and CRL following.
 	// As observed on the Wii, the CRL section is always 0,
 	// along with any references to its version.
-	certificate := r.getRange(header.CertificateSize)
-	crl := r.getRange(header.CRLSize)
+	wad.CertificateChain = r.getRange(header.CertificateSize)
+	wad.CertificateRevocationList = r.getRange(header.CRLSize)
 
 	// We'll next load a ticket from our contents into the struct.
-	ticket, err := LoadTicket(r.getRange(header.TicketSize))
+	err = wad.LoadTicket(r.getRange(header.TicketSize))
 	if err != nil {
 		return nil, err
 	}
 
 	// Load the TMD following from our contents into the struct.
 	// It needs a separate function to handle dynamic contents listed.
-	tmd, err := LoadTMD(r.getRange(header.TMDSize))
+	err = wad.LoadTMD(r.getRange(header.TMDSize))
 	if err != nil {
 		return nil, err
 	}
 
 	// For each content, we want to separate the raw data.
-	data, err := LoadData(r.getRange(header.DataSize), tmd.Contents, ticket.TitleKey)
+	err = wad.LoadData(r.getRange(header.DataSize))
 	if err != nil {
 		return nil, err
 	}
 
 	// We're at the very end and can safely read to the very end of meta, ignoring subsequent data.
-	meta := r.getRange(header.MetaSize)
+	wad.Meta = r.getRange(header.MetaSize)
 
-	return &WAD{
-		Header:                    header,
-		CertificateChain:          certificate,
-		CertificateRevocationList: crl,
-		Ticket:                    ticket,
-		TMD:                       tmd,
-		Data:                      data,
-		Meta:                      meta,
-	}, nil
+	return &wad, nil
 }

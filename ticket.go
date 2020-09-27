@@ -111,33 +111,42 @@ func (t *Ticket) EncryptKey() error {
 	return nil
 }
 
-func LoadTicket(source []byte) (Ticket, error) {
+func (w *WAD) LoadTicket(source []byte) error {
 	var ticket Ticket
 	loadingBuf := bytes.NewBuffer(source)
 	err := binary.Read(loadingBuf, binary.BigEndian, &ticket)
 	if err != nil {
-		return Ticket{}, err
+		return err
 	}
 
+	// This ticket's key should be decrypted for manipulation.
 	err = ticket.DecryptKey()
 	if err != nil {
-		return Ticket{}, err
+		return err
 	}
 
-	return ticket, nil
+	w.Ticket = ticket
+	return nil
 }
 
-func (t *Ticket) GetTicket() []byte {
-	var tmp bytes.Buffer
-	err := binary.Write(&tmp, binary.BigEndian, t)
+func (w *WAD) GetTicket() ([]byte, error) {
+	ticket := w.Ticket
+	// We want this encrypted for further edits.
+	err := ticket.EncryptKey()
 	if err != nil {
-		panic(err)
+		return nil, err
+	}
+
+	var tmp bytes.Buffer
+	err = binary.Write(&tmp, binary.BigEndian, ticket)
+	if err != nil {
+		return nil, err
 	}
 
 	contents, err := ioutil.ReadAll(&tmp)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return contents
+	return contents, nil
 }

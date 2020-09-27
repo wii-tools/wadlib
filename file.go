@@ -15,11 +15,13 @@ type WADFile struct {
 	RawData []byte
 }
 
-func LoadData(data []byte, contents []ContentRecord, titleKey [16]byte) ([]WADFile, error) {
+func (w *WAD) LoadData(data []byte) error {
 	// Each content within the data section is aligned to a 0x40/64-byte boundary.
 	r := readable{
 		data: data,
 	}
+	titleKey := w.Ticket.TitleKey
+	contents := w.TMD.Contents
 
 	// TODO: We naively assume that the index will be accurately indexed from 0.
 	// All observed Nintendo files follow this, but external tools may not follow this format.
@@ -42,44 +44,60 @@ func LoadData(data []byte, contents []ContentRecord, titleKey [16]byte) ([]WADFi
 		// Read the padded amount as aligned to 64 bytes.
 		encryptedData := r.getRange(paddedSize)
 
-		// The title's decrypted key will be what we'll decrypt with.
-		block, err := aes.NewCipher(titleKey[:])
+		file := WADFile{
+			ContentRecord: content,
+			RawData:       encryptedData,
+		}
+
+		// Decrypt the loaded contents!
+		err := file.DecryptData(titleKey)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		// The IV we'll use will be the two bytes sourced from the content's index,
-		// padded with 14 null bytes.
-		var indexBytes [2]byte
-		binary.BigEndian.PutUint16(indexBytes[:], content.Index)
+		wads = append(wads, file)
+	}
+	w.Data = wads
 
-		iv := make([]byte, 16)
-		iv[0] = indexBytes[0]
-		iv[1] = indexBytes[1]
+	return nil
+}
 
-		blockMode := cipher.NewCBCDecrypter(block, iv)
+func (d *WADFile) DecryptData(titleKey [16]byte) error {
+	content := d.ContentRecord
 
-		// The resulting decrypted contents is the same size as the input, including padding.
-		decryptedData := make([]byte, paddedSize)
-
-		// ...and we're off!
-		blockMode.CryptBlocks(decryptedData, encryptedData)
-
-		// Trim off the excess padding once decrypted.
-		decryptedData = decryptedData[:content.Size]
-
-		// Ensure that the decrypted data matches the SHA-1 hash given in the contents list.
-		sha := sha1.Sum(decryptedData)
-		if bytes.Compare(sha[:], content.Hash[:]) != 0 {
-				return nil, errors.New(fmt.Sprintf("content %08x did not match the noted hash when decrypted", content.ID))
-		}
-
-		// We're all set!
-		wads[content.Index] = WADFile{
-			content,
-			decryptedData,
-		}
+	// The title's decrypted key will be what we'll decrypt with.
+	block, err := aes.NewCipher(titleKey[:])
+	if err != nil {
+		return err
 	}
 
-	return wads, nil
+	// The IV we'll use will be the two bytes sourced from the content's index,
+	// padded with 14 null bytes.
+	var indexBytes [2]byte
+	binary.BigEndian.PutUint16(indexBytes[:], content.Index)
+
+	iv := make([]byte, 16)
+	iv[0] = indexBytes[0]
+	iv[1] = indexBytes[1]
+
+	blockMode := cipher.NewCBCDecrypter(block, iv)
+
+	// The resulting decrypted contents is the same size as the input, including padding.
+	decryptedData := make([]byte, len(d.RawData))
+
+	// ...and we're off!
+	blockMode.CryptBlocks(decryptedData, d.RawData)
+
+	// Trim off the excess padding once decrypted.
+	decryptedData = decryptedData[:content.Size]
+
+	// Ensure that the decrypted data matches the SHA-1 hash given in the contents list.
+	sha := sha1.Sum(decryptedData)
+	if bytes.Compare(sha[:], content.Hash[:]) != 0 {
+		return errors.New(fmt.Sprintf("content %08x did not match the noted hash when decrypted", content.ID))
+	}
+
+	// We're all set!
+	d.RawData = decryptedData
+	return nil
 }

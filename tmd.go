@@ -48,7 +48,7 @@ type ContentRecord struct {
 	Hash  [20]byte
 }
 
-func LoadTMD(contents []byte) (TMD, error) {
+func (w *WAD) LoadTMD(contents []byte) error {
 	loadingBuf := bytes.NewBuffer(contents)
 
 	// We have to read in the statically positioned values first.
@@ -57,7 +57,7 @@ func LoadTMD(contents []byte) (TMD, error) {
 	var tmd BinaryTMD
 	err := binary.Read(loadingBuf, binary.BigEndian, &tmd)
 	if err != nil {
-		return TMD{}, err
+		return err
 	}
 
 	// Now, we create contents with the number of values as previously loaded.
@@ -67,36 +67,37 @@ func LoadTMD(contents []byte) (TMD, error) {
 	// We can now read to the end of the TMD to our contents.
 	err = binary.Read(loadingBuf, binary.BigEndian, &contentIndex)
 	if err != nil {
-		return TMD{}, err
+		return err
 	}
 
-	return TMD{
+	w.TMD = TMD{
 		tmd,
 		contentIndex,
-	}, nil
+	}
+	return nil
 }
 
-func (t *TMD) GetTMD() []byte {
+func (w *WAD) GetTMD() ([]byte, error) {
 	// First, handle the fixed-length BinaryTMD.
 	var tmp bytes.Buffer
-	err := binary.Write(&tmp, binary.BigEndian, t.BinaryTMD)
+	err := binary.Write(&tmp, binary.BigEndian, w.TMD.BinaryTMD)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	// Then, write all individual content records.
-	for _, content := range t.Contents {
+	for _, content := range w.TMD.Contents {
 		err := binary.Write(&tmp, binary.BigEndian, content)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 
 	// Read the buffer's contents.
 	contents, err := ioutil.ReadAll(&tmp)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return contents
+	return contents, nil
 }
