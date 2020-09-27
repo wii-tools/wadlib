@@ -31,7 +31,7 @@ func (w *WAD) LoadHeader(source []byte) error {
 
 func (w *WAD) GetHeader() ([]byte, error) {
 	var tmp bytes.Buffer
-	err := binary.Write(&tmp, binary.BigEndian, w)
+	err := binary.Write(&tmp, binary.BigEndian, w.Header)
 	if err != nil {
 		panic(err)
 	}

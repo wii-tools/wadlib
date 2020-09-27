@@ -62,6 +62,16 @@ func (w *WAD) LoadData(data []byte) error {
 	return nil
 }
 
+func (w *WAD) GetData() []byte {
+	var data []byte
+	for _, content := range w.Data {
+		// Data internally is aligned by 64 bytes.
+		data = append(data, pad(content.RawData)...)
+	}
+
+	return data
+}
+
 func (d *WADFile) DecryptData(titleKey [16]byte) error {
 	content := d.ContentRecord
 
@@ -99,5 +109,51 @@ func (d *WADFile) DecryptData(titleKey [16]byte) error {
 
 	// We're all set!
 	d.RawData = decryptedData
+	return nil
+}
+
+func (d *WADFile) EncryptData(titleKey [16]byte) error {
+	content := d.ContentRecord
+
+	// The title's decrypted key will be what we'll encrypt with.
+	block, err := aes.NewCipher(titleKey[:])
+	if err != nil {
+		return err
+	}
+
+	// The IV we'll use will be the two bytes sourced from the content's index,
+	// padded with 14 null bytes.
+	var indexBytes [2]byte
+	binary.BigEndian.PutUint16(indexBytes[:], content.Index)
+
+	iv := make([]byte, 16)
+	iv[0] = indexBytes[0]
+	iv[1] = indexBytes[1]
+
+	blockMode := cipher.NewCBCEncrypter(block, iv)
+
+	// One must encrypt content to 16 bytes.
+	// We pad with null bytes.
+	paddedSize := uint32(content.Size)
+	leftover := paddedSize % 16
+	if leftover != 0 {
+		paddedSize += 16 - leftover
+	}
+
+	decryptedData := make([]byte, paddedSize)
+	copy(decryptedData, d.RawData)
+
+	// The resulting encrypted contents is the same size as our adjusted input, including padding.
+	encryptedData := make([]byte, len(decryptedData))
+
+	// ...and we're off!
+	blockMode.CryptBlocks(encryptedData, decryptedData)
+
+	// Update the content record to reflect the hash of our origin content.
+	sha := sha1.Sum(d.RawData)
+	d.Hash = sha
+
+	// We're all set!
+	d.RawData = encryptedData
 	return nil
 }

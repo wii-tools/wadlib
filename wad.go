@@ -34,6 +34,14 @@ func getPadding(size uint32) uint32 {
 	}
 }
 
+func pad(src []byte) []byte {
+	length := (uint32)(len(src))
+	paddedSize := getPadding(length)
+	resized := make([]byte, paddedSize+length)
+	copy(resized, src)
+	return resized
+}
+
 // You use readable when you want to stagger contents and not use scary splice related methods.
 type readable struct {
 	data       []byte
@@ -117,4 +125,47 @@ func LoadWAD(contents []byte) (*WAD, error) {
 	wad.Meta = r.getRange(header.MetaSize)
 
 	return &wad, nil
+}
+
+func (w *WAD) GetWAD(wadType WADType) ([]byte, error) {
+	tmd, err  := w.GetTMD()
+	if err != nil {
+		return nil, err
+	}
+
+	ticket, err  := w.GetTicket()
+	if err != nil {
+		return nil, err
+	}
+
+	data  := w.GetData()
+
+	// Create a header with our sourced content.
+	header := WADHeader{
+		// This size is fixed, and matches Nintendo's size.
+		HeaderSize:      0x20,
+		WADType:         wadType,
+		CertificateSize: (uint32)(len(w.CertificateChain)),
+		CRLSize:         (uint32)(len(w.CertificateRevocationList)),
+		TicketSize:      (uint32)(len(ticket)),
+		TMDSize:         (uint32)(len(tmd)),
+		DataSize:        (uint32)(len(data)),
+		MetaSize:        (uint32)(len(w.Meta)),
+	}
+	w.Header = header
+
+	headerContents, err := w.GetHeader()
+	if err != nil {
+		return nil, err
+	}
+
+	var final []byte
+	final = append(final, pad(headerContents)...)
+	final = append(final, pad(w.CertificateChain)...)
+	final = append(final, pad(w.CertificateRevocationList)...)
+	final = append(final, pad(ticket)...)
+	final = append(final, pad(tmd)...)
+	final = append(final, pad(data)...)
+	final = append(final, pad(w.Meta)...)
+	return final, nil
 }
