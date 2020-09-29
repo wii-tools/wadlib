@@ -20,7 +20,6 @@ func (w *WAD) LoadData(data []byte) error {
 	r := readable{
 		data: data,
 	}
-	titleKey := w.Ticket.TitleKey
 	contents := w.TMD.Contents
 
 	// TODO: We naively assume that the index will be accurately indexed from 0.
@@ -47,12 +46,6 @@ func (w *WAD) LoadData(data []byte) error {
 		file := WADFile{
 			ContentRecord: content,
 			RawData:       encryptedData,
-		}
-
-		// Decrypt the loaded contents!
-		err := file.DecryptData(titleKey)
-		if err != nil {
-			return err
 		}
 
 		wads[file.Index] = file
