@@ -128,17 +128,17 @@ func LoadWAD(contents []byte) (*WAD, error) {
 }
 
 func (w *WAD) GetWAD(wadType WADType) ([]byte, error) {
-	tmd, err  := w.GetTMD()
+	tmd, err := w.GetTMD()
 	if err != nil {
 		return nil, err
 	}
 
-	ticket, err  := w.GetTicket()
+	ticket, err := w.GetTicket()
 	if err != nil {
 		return nil, err
 	}
 
-	data  := w.GetData()
+	data := w.GetData()
 
 	// Create a header with our sourced content.
 	header := WADHeader{

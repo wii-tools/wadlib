@@ -55,7 +55,7 @@ func (w *WAD) LoadData(data []byte) error {
 			return err
 		}
 
-		wads = append(wads, file)
+		wads[file.Index] = file
 	}
 	w.Data = wads
 
