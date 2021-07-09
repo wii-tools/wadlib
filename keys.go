@@ -7,7 +7,8 @@ var (
 	// KoreanKey is the common key for titles in the Korean-covered regions.
 	// As hex, "63b82bb4f4614e2e13f2fefbba4c9b7e"
 	KoreanKey = [16]byte{0x63, 0xb8, 0x2b, 0xb4, 0xf4, 0x61, 0x4e, 0x2e, 0x13, 0xf2, 0xfe, 0xfb, 0xba, 0x4c, 0x9b, 0x7e}
-	// Untested. Used for system titles as updated from Wii U mode, and never actually known to anything inside of vWii.
+	// WiiUvWiiKey is untested.
+	// Used for system titles as updated from Wii U mode, and never actually known to anything inside of vWii.
 	WiiUvWiiKey = [16]byte{0x30, 0xbf, 0xc7, 0x6e, 0x7c, 0x19, 0xaf, 0xbb, 0x23, 0x16, 0x33, 0x30, 0xce, 0xd7, 0xc2, 0x8d}
 )
 

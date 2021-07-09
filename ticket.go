@@ -53,7 +53,9 @@ func (t *Ticket) selectCommonKey() [16]byte {
 	case KeyTypevWii:
 		return WiiUvWiiKey
 	default:
-		panic("unknown key type specified in ticket")
+		// Some WAD fakesigning utilities use an index outside of this list.
+		// We assume the WAD is using the common key regardless.
+		return CommonKey
 	}
 }
 
