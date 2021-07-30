@@ -144,6 +144,7 @@ func (d *WADFile) EncryptData(titleKey [16]byte) error {
 
 	// Update the content record to reflect the hash of our origin content.
 	sha := sha1.Sum(d.RawData)
+	d.Size = uint64(len(d.RawData))
 	d.Hash = sha
 
 	// We're all set!
