@@ -1,3 +1,3 @@
 module github.com/wii-tools/wadlib
 
-go 1.14
+go 1.17

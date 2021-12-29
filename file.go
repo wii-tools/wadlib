@@ -13,7 +13,7 @@ import (
 // WADFile represents a file within a WAD.
 // RawData should always be the encrypted data ready to be stored within a WAD.
 type WADFile struct {
-	ContentRecord
+	Record  *ContentRecord
 	RawData []byte
 }
 
@@ -31,8 +31,8 @@ func (w *WAD) LoadDataSection(data []byte) error {
 	// otherwise data will read out of order in these cases.
 
 	// All data contents will be the same amount as the number of contents per TMD.
-	wads := make([]WADFile, len(contents))
-	for _, content := range contents {
+	w.Data = make([]WADFile, len(contents))
+	for idx, content := range w.TMD.Contents {
 		// It's okay to cast this from a uint64 as the WAD file format
 		// cannot exceed the maximum uint32 value within the data section.
 		// We read aligned to 16 bytes as the encrypted data is stored with padding.
@@ -47,13 +47,12 @@ func (w *WAD) LoadDataSection(data []byte) error {
 		encryptedData := r.getRange(paddedSize)
 
 		file := WADFile{
-			ContentRecord: content,
-			RawData:       encryptedData,
+			Record:  &w.TMD.Contents[idx],
+			RawData: encryptedData,
 		}
 
-		wads[file.Index] = file
+		w.Data[content.Index] = file
 	}
-	w.Data = wads
 
 	return nil
 }
@@ -69,19 +68,19 @@ func (w *WAD) GetDataSection() []byte {
 	return data
 }
 
-func (d *WADFile) DecryptData(titleKey [16]byte) error {
-	content := d.ContentRecord
-
-	// The title's decrypted key will be what we'll decrypt with.
+// DecryptData returns the decrypted contents of this WADFile with the given title key.
+func (d *WADFile) DecryptData(titleKey [16]byte) ([]byte, error) {
+	// The passed title key will be what we'll decrypt with.
+	// It must be 16 bytes.
 	block, err := aes.NewCipher(titleKey[:])
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	// The IV we'll use will be the two bytes sourced from the content's index,
 	// padded with 14 null bytes.
 	var indexBytes [2]byte
-	binary.BigEndian.PutUint16(indexBytes[:], content.Index)
+	binary.BigEndian.PutUint16(indexBytes[:], d.Record.Index)
 
 	iv := make([]byte, 16)
 	iv[0] = indexBytes[0]
@@ -96,32 +95,31 @@ func (d *WADFile) DecryptData(titleKey [16]byte) error {
 	blockMode.CryptBlocks(decryptedData, d.RawData)
 
 	// Trim off the excess padding once decrypted.
-	decryptedData = decryptedData[:content.Size]
+	decryptedData = decryptedData[:d.Record.Size]
 
 	// Ensure that the decrypted data matches the SHA-1 hash given in the contents list.
 	sha := sha1.Sum(decryptedData)
-	if bytes.Compare(sha[:], content.Hash[:]) != 0 {
-		return errors.New(fmt.Sprintf("content %08x did not match the noted hash when decrypted", content.ID))
+	if bytes.Compare(sha[:], d.Record.Hash[:]) != 0 {
+		return nil, errors.New(fmt.Sprintf("content %08x did not match the noted hash when decrypted", d.Record.ID))
 	}
 
 	// We're all set!
-	d.RawData = decryptedData
-	return nil
+	return decryptedData, nil
 }
 
-func (d *WADFile) EncryptData(titleKey [16]byte) error {
-	content := d.ContentRecord
-
-	// The title's decrypted key will be what we'll encrypt with.
+// UpdateData updates the contents of this WADFile with the given data and title key.
+func (d *WADFile) UpdateData(contents []byte, titleKey [16]byte) {
+	// The passed title key will be what we'll encrypt with.
+	// It must be 16 bytes.
 	block, err := aes.NewCipher(titleKey[:])
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	// The IV we'll use will be the two bytes sourced from the content's index,
 	// padded with 14 null bytes.
 	var indexBytes [2]byte
-	binary.BigEndian.PutUint16(indexBytes[:], content.Index)
+	binary.BigEndian.PutUint16(indexBytes[:], d.Record.Index)
 
 	iv := make([]byte, 16)
 	iv[0] = indexBytes[0]
@@ -129,29 +127,25 @@ func (d *WADFile) EncryptData(titleKey [16]byte) error {
 
 	blockMode := cipher.NewCBCEncrypter(block, iv)
 
-	// One must encrypt content to 16 bytes.
+	// Update the content record to reflect the hash and size of our new content.
+	d.Record.Hash = sha1.Sum(contents)
+	d.Record.Size = uint64(len(contents))
+
+	// One must pad encrypted content to 16 bytes.
 	// We pad with null bytes.
-	paddedSize := uint32(content.Size)
+	paddedSize := d.Record.Size
 	leftover := paddedSize % 16
 	if leftover != 0 {
 		paddedSize += 16 - leftover
 	}
 
 	decryptedData := make([]byte, paddedSize)
-	copy(decryptedData, d.RawData)
+	copy(decryptedData, contents)
 
 	// The resulting encrypted contents is the same size as our adjusted input, including padding.
 	encryptedData := make([]byte, len(decryptedData))
 
 	// ...and we're off!
 	blockMode.CryptBlocks(encryptedData, decryptedData)
-
-	// Update the content record to reflect the hash of our origin content.
-	sha := sha1.Sum(d.RawData)
-	d.Size = uint64(len(d.RawData))
-	d.Hash = sha
-
-	// We're all set!
 	d.RawData = encryptedData
-	return nil
 }

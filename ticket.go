@@ -44,6 +44,7 @@ type TimeLimitEntry struct {
 	Limit uint32
 }
 
+// selectCommonKey determines the proper key based on the index.
 func (t *Ticket) selectCommonKey() [16]byte {
 	switch t.KeyType {
 	case KeyTypeCommon:
@@ -59,12 +60,14 @@ func (t *Ticket) selectCommonKey() [16]byte {
 	}
 }
 
-func (t *Ticket) DecryptKey() error {
+func (t *Ticket) GetTitleKey() [16]byte {
 	// Use the appropriate common key per this ticket.
 	key := t.selectCommonKey()
+
+	// It should not be possible for our key not to be 16 bytes.
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	// The specified title ID is used as the IV.
@@ -81,17 +84,20 @@ func (t *Ticket) DecryptKey() error {
 	// Set this decrypted key to what we have stored.
 	var titleKey [16]byte
 	copy(titleKey[:], decryptedKey)
-	t.TitleKey = titleKey
-
-	return nil
+	return titleKey
 }
 
-func (t *Ticket) EncryptKey() error {
+// UpdateTitleKey updates the key for the given ticket.
+// Note that this will not re-encrypt existing data for the WAD.
+// Consider using WAD.ChangeTitleKey to re-encrypt instead, where possible.
+func (t *Ticket) UpdateTitleKey(updated [16]byte) {
 	// Use the appropriate common key per this ticket.
 	key := t.selectCommonKey()
+
+	// It should not be possible for our key not to be 16 bytes.
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	// The specified title ID is used as the IV.
@@ -103,16 +109,15 @@ func (t *Ticket) EncryptKey() error {
 	encryptedKey := make([]byte, 16)
 
 	// t.TitleKey is the current, encrypted contents from the original ticket.
-	blockMode.CryptBlocks(encryptedKey, t.TitleKey[:])
+	blockMode.CryptBlocks(encryptedKey, updated[:])
 
 	// Set this encrypted key to what we have stored.
-	var titleKey [16]byte
-	copy(titleKey[:], encryptedKey)
-	t.TitleKey = titleKey
-
-	return nil
+	var newTitleKey [16]byte
+	copy(newTitleKey[:], encryptedKey)
+	t.TitleKey = newTitleKey
 }
 
+// LoadTicket loads the given bytes from source into the Ticket for the current WAD.
 func (w *WAD) LoadTicket(source []byte) error {
 	var ticket Ticket
 	loadingBuf := bytes.NewBuffer(source)
@@ -121,26 +126,16 @@ func (w *WAD) LoadTicket(source []byte) error {
 		return err
 	}
 
-	// This ticket's key should be decrypted for manipulation.
-	err = ticket.DecryptKey()
-	if err != nil {
-		return err
-	}
-
 	w.Ticket = ticket
 	return nil
 }
 
+// GetTicket returns the bytes of a given Ticket within the current WAD.
 func (w *WAD) GetTicket() ([]byte, error) {
 	ticket := w.Ticket
-	// We want this encrypted for further edits.
-	err := ticket.EncryptKey()
-	if err != nil {
-		return nil, err
-	}
 
 	var tmp bytes.Buffer
-	err = binary.Write(&tmp, binary.BigEndian, ticket)
+	err := binary.Write(&tmp, binary.BigEndian, ticket)
 	if err != nil {
 		return nil, err
 	}

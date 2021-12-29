@@ -58,6 +58,7 @@ func (w *WAD) LoadTMD(contents []byte) error {
 	// We have to read in the statically positioned values first.
 	// The buffer will read in all it can,
 	// which should be all values up to the variable contents at its end.
+	// The primary length of the TMD struct is 484 bytes.
 	var tmd BinaryTMD
 	err := binary.Read(loadingBuf, binary.BigEndian, &tmd)
 	if err != nil {
@@ -65,7 +66,6 @@ func (w *WAD) LoadTMD(contents []byte) error {
 	}
 
 	// Now, we create contents with the number of values as previously loaded.
-	// The primary length of the TMD struct is 484 bytes.
 	contentIndex := make([]ContentRecord, tmd.NumberOfContents)
 
 	// We can now read to the end of the TMD to our contents.
