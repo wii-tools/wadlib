@@ -10,12 +10,15 @@ import (
 	"fmt"
 )
 
+// WADFile represents a file within a WAD.
+// RawData should always be the encrypted data ready to be stored within a WAD.
 type WADFile struct {
 	ContentRecord
 	RawData []byte
 }
 
-func (w *WAD) LoadData(data []byte) error {
+// LoadDataSection loads the binary data from a WAD and parses it as specified within the TMD.
+func (w *WAD) LoadDataSection(data []byte) error {
 	// Each content within the data section is aligned to a 0x40/64-byte boundary.
 	r := readable{
 		data: data,
@@ -55,7 +58,8 @@ func (w *WAD) LoadData(data []byte) error {
 	return nil
 }
 
-func (w *WAD) GetData() []byte {
+// GetDataSection returns data as specified within the TMD.
+func (w *WAD) GetDataSection() []byte {
 	var data []byte
 	for _, content := range w.Data {
 		// Data internally is aligned by 64 bytes.

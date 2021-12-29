@@ -116,7 +116,7 @@ func LoadWAD(contents []byte) (*WAD, error) {
 	}
 
 	// For each content, we want to separate the raw data.
-	err = wad.LoadData(r.getRange(header.DataSize))
+	err = wad.LoadDataSection(r.getRange(header.DataSize))
 	if err != nil {
 		return nil, err
 	}
@@ -127,6 +127,7 @@ func LoadWAD(contents []byte) (*WAD, error) {
 	return &wad, nil
 }
 
+// GetWAD returns the bytes necessary for a usable WAD.
 func (w *WAD) GetWAD(wadType WADType) ([]byte, error) {
 	tmd, err := w.GetTMD()
 	if err != nil {
@@ -138,7 +139,7 @@ func (w *WAD) GetWAD(wadType WADType) ([]byte, error) {
 		return nil, err
 	}
 
-	data := w.GetData()
+	data := w.GetDataSection()
 
 	// Create a header with our sourced content.
 	header := WADHeader{

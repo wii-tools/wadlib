@@ -18,6 +18,7 @@ type WADHeader struct {
 	MetaSize        uint32
 }
 
+// LoadHeader creates a WADHeader based off of the given contents.
 func (w *WAD) LoadHeader(source []byte) error {
 	var header WADHeader
 	loadingBuf := bytes.NewBuffer(source)
@@ -29,6 +30,7 @@ func (w *WAD) LoadHeader(source []byte) error {
 	return nil
 }
 
+// GetHeader returns bytes based off the WADHeader for the given WAD.
 func (w *WAD) GetHeader() ([]byte, error) {
 	var tmp bytes.Buffer
 	err := binary.Write(&tmp, binary.BigEndian, w.Header)

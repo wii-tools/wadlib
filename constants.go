@@ -36,6 +36,9 @@ const (
 	LicenseService
 )
 
+// ContentType specifies the type of content expected.
+// It can be a shared content held in /shared2,
+// or a normal content for the title itself.
 type ContentType uint16
 
 const (

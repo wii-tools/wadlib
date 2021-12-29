@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 )
 
+// BinaryTMD describes a byte-level format for a TMD.
 type BinaryTMD struct {
 	SignatureType SignatureType
 	Signature     [256]byte
@@ -35,11 +36,13 @@ type BinaryTMD struct {
 	_ uint16
 }
 
+// TMD describes a human-usable TMD format.
 type TMD struct {
 	BinaryTMD
 	Contents []ContentRecord
 }
 
+// ContentRecord describes information about a given content.
 type ContentRecord struct {
 	ID    uint32
 	Index uint16
@@ -48,6 +51,7 @@ type ContentRecord struct {
 	Hash  [20]byte
 }
 
+// LoadTMD loads a given TMD from the passed contents into the WAD.
 func (w *WAD) LoadTMD(contents []byte) error {
 	loadingBuf := bytes.NewBuffer(contents)
 
@@ -77,6 +81,7 @@ func (w *WAD) LoadTMD(contents []byte) error {
 	return nil
 }
 
+// GetTMD returns the bytes for the given TMD within the current WAD.
 func (w *WAD) GetTMD() ([]byte, error) {
 	// First, handle the fixed-length BinaryTMD.
 	var tmp bytes.Buffer
@@ -87,7 +92,7 @@ func (w *WAD) GetTMD() ([]byte, error) {
 
 	// Then, write all individual content records.
 	for _, content := range w.TMD.Contents {
-		err := binary.Write(&tmp, binary.BigEndian, content)
+		err = binary.Write(&tmp, binary.BigEndian, content)
 		if err != nil {
 			return nil, err
 		}
