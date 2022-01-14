@@ -2,13 +2,14 @@ package wadlib
 
 var (
 	// CommonKey is the common key for titles in all regions but Korea.
-	// Put into hex, "ebe42a225e8593e448d9c5457381aaf7"
+	// As hex, "ebe42a225e8593e448d9c5457381aaf7"
 	CommonKey = [16]byte{0xeb, 0xe4, 0x2a, 0x22, 0x5e, 0x85, 0x93, 0xe4, 0x48, 0xd9, 0xc5, 0x45, 0x73, 0x81, 0xaa, 0xf7}
 	// KoreanKey is the common key for titles in the Korean-covered regions.
 	// As hex, "63b82bb4f4614e2e13f2fefbba4c9b7e"
 	KoreanKey = [16]byte{0x63, 0xb8, 0x2b, 0xb4, 0xf4, 0x61, 0x4e, 0x2e, 0x13, 0xf2, 0xfe, 0xfb, 0xba, 0x4c, 0x9b, 0x7e}
 	// WiiUvWiiKey is untested.
 	// Used for system titles as updated from Wii U mode, and never actually known to anything inside of vWii.
+	// As hex, "30bfc76e7c19afbb23163330ced7c28d"
 	WiiUvWiiKey = [16]byte{0x30, 0xbf, 0xc7, 0x6e, 0x7c, 0x19, 0xaf, 0xbb, 0x23, 0x16, 0x33, 0x30, 0xce, 0xd7, 0xc2, 0x8d}
 )
 
@@ -17,6 +18,6 @@ type KeyType uint8
 
 const (
 	KeyTypeCommon KeyType = 0x0
-	KeyTypeKoren          = 0x1
+	KeyTypeKorean          = 0x1
 	KeyTypevWii           = 0x2
 )

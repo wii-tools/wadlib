@@ -49,7 +49,7 @@ func (t *Ticket) selectCommonKey() [16]byte {
 	switch t.KeyType {
 	case KeyTypeCommon:
 		return CommonKey
-	case KeyTypeKoren:
+	case KeyTypeKorean:
 		return KoreanKey
 	case KeyTypevWii:
 		return WiiUvWiiKey
